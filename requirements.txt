@@ -1,0 +1,17 @@
+appdirs==1.4.3
+funcsigs==1.0.2
+Keras==2.0.3
+mido==1.2.4
+mock==2.0.0
+numpy==1.12.1
+packaging==16.8
+pbr==2.1.0
+pkg-resources==0.0.0
+pretty-midi==0.2.7
+protobuf==3.2.0
+pyparsing==2.2.0
+PyYAML==3.12
+scipy==0.19.0
+six==1.10.0
+tensorflow==1.0.1
+Theano==0.9.0
