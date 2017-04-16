@@ -64,27 +64,28 @@ By default, this creates 10 MIDI files using a checkpoint from the most recent f
 
 - `--data_dir`: A folder containing `.mid` files to use for training. All files in this folder will be used for training.
 - `--experiment_dir`: The name of the folder to use when saving the model checkpoints and Tensorboard logs. If omitted, a new folder will be created with an auto-incremented number inside of `experiments/`.
-- `--n_jobs` (default 1): The number of CPU cores to use when loading and parsing MIDI files from `--data_dir`. Increasing this value can dramatically speed up training. I commonly set this value to use all cores, which for my quad-core machine is 8 (Intel CPUs often have 2 virtual cores per CPU).
-- `--max_files_in_ram` (default: 50): Files in `--data_dir` are loaded into RAM in small batches, processed, and then released to avoid having to load all training files into memory at once (which may be impossible when training on hundreds of files on a machine with limited memory). This value specifies the maximum number of MIDI files to keep in RAM at any one time. Using a larger number significantly speeds up training, however it also runs the risk of using too much RAM and causing your machine to [thrash](https://en.wikipedia.org/wiki/Thrashing_(computer_science)) or crash. You can find a nice balance by inspecting your system monitor (Activity Monitor on MacOS and Monitor on Ubuntu) while training and adjusting accourdingly.
 - `--rnn_size` (default: 64): The number of neurons in hidden layers.
 - `--num_layers` (default: 1): The number of hidden layers.
+- `--learning_rate` (default: 0.002): The learning rate to use with the optimizer. It is recomended to adjust this value in multiples of 10.
 - `--window_size` (default: 20): The number of previous notes (and rests) to use as input to the network at each step (measured in 16th notes). It is helpful to think of this as the fixed width of a piano roll rather than individual events.
 - `--batch_size` (default: 32): The number of samples to pass through the network before updating weights (backpropagating).
 - `--num_epochs` (default: 10): The number of epochs before completing training. One epoch is equal to one full pass through all midi files in `--data_dir`. Because of the way files are lazy loaded, this number can only be an estimate.
-- `--save_every` (default: 1000): The number of iterations before saving each checkpoint.
-- `--learning_rate` (default: 0.002): The learning rate to use with the optimizer. It is recomended to adjust this value in multiples of 10.
-- `--input_keep_prob` (default: 1.0): The percentage of weights to keep "on" in the input layer during each training step. Setting this value < `1.0` is a regularization technique called dropout which helps prevent model overfitting. (1.0 - this value = Dropout).
-- `--output_keep_prob` (default: 1.0): same as `--input_keep_prob` but for the output layer.
+- `--dropout` (default: 0.2): The normalized percentage (0-1) of weights to randomly turn "off" in each layer during a training step. This is a regularization technique called which helps prevent model overfitting. Recommended values are between 0.2 and 0.5, or 20% and 50%. 
+- `--optimizer` (default: "adam"): The optimization algorithm to use when minimizing your loss function. See https://keras.io/optimizers for a list of supported optimizers and and links to their descriptions.
+- `--grad_clip` (default: 5.0): Clip backpropagated gradients to this value.
+- `--message`: An optional note that can be used to describe your experiment. This text will be saved to `message.txt` inside of `--experiment_dir`. Including a value for this flag is very helpful if you find yourself running many experiments.
+- `--n_jobs` (default 1): The number of CPU cores to use when loading and parsing MIDI files from `--data_dir`. Increasing this value can dramatically speed up training. I commonly set this value to use all cores, which for my quad-core machine is 8 (Intel CPUs often have 2 virtual cores per CPU).
+- `--max_files_in_ram` (default: 50): Files in `--data_dir` are loaded into RAM in small batches, processed, and then released to avoid having to load all training files into memory at once (which may be impossible when training on hundreds of files on a machine with limited memory). This value specifies the maximum number of MIDI files to keep in RAM at any one time. Using a larger number significantly speeds up training, however it also runs the risk of using too much RAM and causing your machine to [thrash](https://en.wikipedia.org/wiki/Thrashing_(computer_science)) or crash. You can find a nice balance by inspecting your system monitor (Activity Monitor on MacOS and Monitor on Ubuntu) while training and adjusting accourdingly.
 
 ```
 usage: train.py [-h] [--data_dir DATA_DIR] [--experiment_dir EXPERIMENT_DIR]
-                [--n_jobs N_JOBS] [--max_files_in_ram MAX_FILES_IN_RAM]
                 [--rnn_size RNN_SIZE] [--num_layers NUM_LAYERS]
-                [--window_size WINDOW_SIZE] [--batch_size BATCH_SIZE]
-                [--num_epochs NUM_EPOCHS] [--save_every SAVE_EVERY]
-                [--learning_rate LEARNING_RATE]
-                [--output_keep_prob OUTPUT_KEEP_PROB]
-                [--input_keep_prob INPUT_KEEP_PROB] [--verbose VERBOSE]
+                [--learning_rate LEARNING_RATE] [--window_size WINDOW_SIZE]
+                [--batch_size BATCH_SIZE] [--num_epochs NUM_EPOCHS]
+                [--dropout DROPOUT]
+                [--optimizer {sgd,rmsprop,adagrad,adadelta,adam,adamax,nadam}]
+                [--grad_clip GRAD_CLIP] [--message MESSAGE] [--n_jobs N_JOBS]
+                [--max_files_in_ram MAX_FILES_IN_RAM]
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -94,34 +95,41 @@ optional arguments:
                         directory to store checkpointed models and tensorboard
                         logs.if omitted, will create a new numbered folder in
                         experiments/. (default: experiments/default)
+  --rnn_size RNN_SIZE   size of RNN hidden state (default: 64)
+  --num_layers NUM_LAYERS
+                        number of layers in the RNN (default: 1)
+  --learning_rate LEARNING_RATE
+                        learning rate. If not specified, the recommended
+                        learning rate for the chosen optimizer is used.
+                        (default: None)
+  --window_size WINDOW_SIZE
+                        Window size for RNN input per step. (default: 20)
+  --batch_size BATCH_SIZE
+                        minibatch size (default: 32)
+  --num_epochs NUM_EPOCHS
+                        number of epochs before stopping training. (default:
+                        10)
+  --dropout DROPOUT     percentage of weights that are turned off every
+                        training set step. This is a popular regularization
+                        that can help with overfitting. Recommended values are
+                        0.2-0.5 (default: 0.2)
+  --optimizer {sgd,rmsprop,adagrad,adadelta,adam,adamax,nadam}
+                        The optimization algorithm to use. See
+                        https://keras.io/optimizers for a full list of
+                        optimizers. (default: adam)
+  --grad_clip GRAD_CLIP
+                        clip gradients at this value. (default: 5.0)
+  --message MESSAGE, -m MESSAGE
+                        a note to self about the experiment saved to
+                        message.txt in --experiment_dir. (default: None)
   --n_jobs N_JOBS, -j N_JOBS
                         Number of CPUs to use when loading and parsing midi
                         files. (default: 1)
-  --max_files_in_ram MAX_FILES_IN_RAM, -m MAX_FILES_IN_RAM
+  --max_files_in_ram MAX_FILES_IN_RAM
                         The maximum number of midi files to load into RAM at
                         once. A higher value trains faster but uses more RAM.
                         A lower value uses less RAM but takes significantly
                         longer to train. (default: 50)
-  --rnn_size RNN_SIZE   size of RNN hidden state (default: 64)
-  --num_layers NUM_LAYERS
-                        number of layers in the RNN (default: 1)
-  --window_size WINDOW_SIZE
-                        Window size for RNN input per step. (default: 20)
-  --batch_size BATCH_SIZE
-                        minibatch size (default: 50)
-  --num_epochs NUM_EPOCHS
-                        number of epochs (default: 10)
-  --save_every SAVE_EVERY
-                        save frequency (default: 1000)
-  --learning_rate LEARNING_RATE
-                        learning rate (default: 0.002)
-  --input_keep_prob INPUT_KEEP_PROB
-                        probability of keeping weights in the input layer (1.0
-                        - this value = Dropout) (default: 1.0)
-  --output_keep_prob OUTPUT_KEEP_PROB
-                        probability of keeping weights in the hidden layer
-                        (1.0 - this value = Dropout) (default: 1.0)
-
 ```
 
 ### `sample.py`

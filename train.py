@@ -33,7 +33,7 @@ def parse_args():
                         help='minibatch size')
     parser.add_argument('--num_epochs', type=int, default=10,
                         help='number of epochs before stopping training.')
-    parser.add_argument('--dropout', type=float, default=0.0,
+    parser.add_argument('--dropout', type=float, default=0.2,
                         help='percentage of weights that are turned off every training '\
                         'set step. This is a popular regularization that can help with '\
                         'overfitting. Recommended values are 0.2-0.5')
@@ -42,7 +42,7 @@ def parse_args():
                                  'adam', 'adamax', 'nadam'], default='adam',
                         help='The optimization algorithm to use. '\
                         'See https://keras.io/optimizers for a full list of optimizers.')
-    parser.add_argument('--grad_clip', type=float, default=5.,
+    parser.add_argument('--grad_clip', type=float, default=5.0,
                         help='clip gradients at this value.')
     parser.add_argument('--message', '-m', type=str,
                         help='a note to self about the experiment saved to message.txt '\
