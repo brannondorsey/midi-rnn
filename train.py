@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-import os, argparse
+import os, argparse, time
 import utils
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Dropout
@@ -49,7 +49,7 @@ def parse_args():
                         'in --experiment_dir.')
     parser.add_argument('--n_jobs', '-j', type=int, default=1, 
                         help='Number of CPUs to use when loading and parsing midi files.')
-    parser.add_argument('--max_files_in_ram', default=50,
+    parser.add_argument('--max_files_in_ram', default=25,
                         help='The maximum number of midi files to load into RAM at once.'\
                         ' A higher value trains faster but uses more RAM. A lower value '\
                         'uses less RAM but takes significantly longer to train.')
@@ -68,7 +68,6 @@ def get_model(args, experiment_dir=None):
             kwargs['units'] = args.rnn_size
             # if this is the first layer
             if layer_index == 0:
-                print('FIRST LAYER')
                 kwargs['input_shape'] = (args.window_size, OUTPUT_SIZE)
                 if args.num_layers == 1:
                     kwargs['return_sequences'] = False
@@ -78,11 +77,9 @@ def get_model(args, experiment_dir=None):
             else:
                 # if this is a middle layer
                 if not layer_index == args.num_layers - 1:
-                    print('MIDDLE LAYER')
                     kwargs['return_sequences'] = True
                     model.add(LSTM(**kwargs))
                 else: # this is the last layer
-                    print('LAST LAYER')
                     kwargs['return_sequences'] = False
                     model.add(LSTM(**kwargs))
             model.add(Dropout(args.dropout))
@@ -217,14 +214,19 @@ def main():
     callbacks = get_callbacks(experiment_dir)
     
     print('fitting model...')
+    # this is a somewhat magic number which is the average number of length-20 windows
+    # calculated from ~5K MIDI files from the Lakh MIDI Dataset.
+    magic_number = 827
+    start_time = time.time()
     model.fit_generator(train_generator,
-                        steps_per_epoch=10000, 
+                        steps_per_epoch=len(midi_files) * magic_number / args.batch_size, 
                         epochs=args.num_epochs,
                         validation_data=val_generator, 
-                        validation_steps=2000,
+                        validation_steps=len(midi_files) * 0.2 * magic_number / args.batch_size,
                         verbose=1, 
                         callbacks=callbacks,
                         initial_epoch=epoch)
+    utils.log('Finished in {:.2f} seconds'.format(time.time() - start_time), args.verbose)
 
 if __name__ == '__main__':
     main()
