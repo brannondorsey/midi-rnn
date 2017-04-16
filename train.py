@@ -5,6 +5,7 @@ from keras.models import Sequential
 from keras.layers import Dense, Activation, Dropout
 from keras.layers import LSTM
 from keras.callbacks import ModelCheckpoint, ReduceLROnPlateau, TensorBoard
+from keras.optimizers import SGD, RMSprop, Adagrad, Adadelta, Adam, Adamax, Nadam
 
 OUTPUT_SIZE = 129 # 0-127 notes + 1 for rests
 
@@ -19,30 +20,39 @@ def parse_args():
                         default='experiments/default',
                         help='directory to store checkpointed models and tensorboard logs.' \
                              'if omitted, will create a new numbered folder in experiments/.')
-    parser.add_argument('--n_jobs', '-j', type=int, default=1, 
-                        help='Number of CPUs to use when loading and parsing midi files.')
-    parser.add_argument('--max_files_in_ram', '-m', default=50,
-                        help='The maximum number of midi files to load into RAM at once.'\
-                        ' A higher value trains faster but uses more RAM. A lower value '\
-                        'uses less RAM but takes significantly longer to train.')
     parser.add_argument('--rnn_size', type=int, default=64,
                         help='size of RNN hidden state')
     parser.add_argument('--num_layers', type=int, default=1,
                         help='number of layers in the RNN')
+    parser.add_argument('--learning_rate', type=float, default=None,
+                        help='learning rate. If not specified, the recommended learning '\
+                        'rate for the chosen optimizer is used.')
     parser.add_argument('--window_size', type=int, default=20,
                         help='Window size for RNN input per step.')
     parser.add_argument('--batch_size', type=int, default=32,
                         help='minibatch size')
     parser.add_argument('--num_epochs', type=int, default=10,
-                        help='number of epochs')
-    parser.add_argument('--save_every', type=int, default=1000,
-                        help='save frequency')
-    parser.add_argument('--learning_rate', type=float, default=0.002,
-                        help='learning rate')
-    parser.add_argument('--output_keep_prob', type=float, default=1.0,
-                        help='probability of keeping weights in the hidden layer (1.0 - this value = Dropout)')
-    parser.add_argument('--input_keep_prob', type=float, default=1.0,
-                        help='probability of keeping weights in the input layer (1.0 - this value = Dropout)')
+                        help='number of epochs before stopping training.')
+    parser.add_argument('--dropout', type=float, default=0.0,
+                        help='percentage of weights that are turned off every training '\
+                        'set step. This is a popular regularization that can help with '\
+                        'overfitting. Recommended values are 0.2-0.5')
+    parser.add_argument('--optimizer', 
+                        choices=['sgd', 'rmsprop', 'adagrad', 'adadelta', 
+                                 'adam', 'adamax', 'nadam'], default='adam',
+                        help='The optimization algorithm to use. '\
+                        'See https://keras.io/optimizers for a full list of optimizers.')
+    parser.add_argument('--grad_clip', type=float, default=5.,
+                        help='clip gradients at this value.')
+    parser.add_argument('--message', '-m', type=str,
+                        help='a note to self about the experiment saved to message.txt '\
+                        'in --experiment_dir.')
+    parser.add_argument('--n_jobs', '-j', type=int, default=1, 
+                        help='Number of CPUs to use when loading and parsing midi files.')
+    parser.add_argument('--max_files_in_ram', default=50,
+                        help='The maximum number of midi files to load into RAM at once.'\
+                        ' A higher value trains faster but uses more RAM. A lower value '\
+                        'uses less RAM but takes significantly longer to train.')
     return parser.parse_args()
 
 # create or load a saved model
@@ -53,19 +63,62 @@ def get_model(args, experiment_dir=None):
     
     if not experiment_dir:
         model = Sequential()
-        model.add(LSTM(args.rnn_size,
-                       return_sequences=False,
-                       input_shape=(args.window_size, OUTPUT_SIZE)))
-        model.add(Dropout(1.0 - args.input_keep_prob))
-        # model.add(LSTM(32, return_sequences=False))
-        # model.add(Dropout(0.2))
+        for layer_index in range(args.num_layers):
+            kwargs = dict() 
+            kwargs['units'] = args.rnn_size
+            # if this is the first layer
+            if layer_index == 0:
+                print('FIRST LAYER')
+                kwargs['input_shape'] = (args.window_size, OUTPUT_SIZE)
+                if args.num_layers == 1:
+                    kwargs['return_sequences'] = False
+                else:
+                    kwargs['return_sequences'] = True
+                model.add(LSTM(**kwargs))
+            else:
+                # if this is a middle layer
+                if not layer_index == args.num_layers - 1:
+                    print('MIDDLE LAYER')
+                    kwargs['return_sequences'] = True
+                    model.add(LSTM(**kwargs))
+                else: # this is the last layer
+                    print('LAST LAYER')
+                    kwargs['return_sequences'] = False
+                    model.add(LSTM(**kwargs))
+            model.add(Dropout(args.dropout))
         model.add(Dense(OUTPUT_SIZE))
         model.add(Activation('softmax'))
     else:
         model, epoch = utils.load_model_from_checkpoint(experiment_dir)
 
+    kwargs = { 'clipvalue': args.grad_clip }
+
+    if args.learning_rate:
+        kwargs['lr'] = args.learning_rate
+
+    # select the optimizers
+    if args.optimizer == 'sgd':
+        optimizer = SGD(**kwargs)
+    elif args.optimizer == 'rmsprop':
+        optimizer = RMSprop(**kwargs)
+    elif args.optimizer == 'adagrad':
+        optimizer = Adagrad(**kwargs)
+    elif args.optimizer == 'adadelta':
+        optimizer = Adadelta(**kwargs)
+    elif args.optimizer == 'adam':
+        optimizer = Adam(**kwargs)
+    elif args.optimizer == 'adamax':
+        optimizer = Adamax(**kwargs)
+    elif args.optimizer == 'nadam':
+        optimizer = Nadam(**kwargs)
+    else:
+        utils.log(
+            'Error: {} is not a supported optimizer. Exiting.'.format(args.optimizer),
+            True)
+        exit(1)
+
     model.compile(loss='categorical_crossentropy', 
-                  optimizer='adam',
+                  optimizer=optimizer,
                   metrics=['accuracy'])
     return model, epoch
 
@@ -129,6 +182,13 @@ def main():
     # create the experiment directory and return its name
     experiment_dir = utils.create_experiment_dir(args.experiment_dir, args.verbose)
 
+    # write --message to experiment_dir
+    if args.message:
+        with open(os.path.join(experiment_dir, 'message.txt'), 'w') as f:
+            f.write(args.message)
+            utils.log('Wrote {} bytes to {}'.format(len(args.message), 
+                os.path.join(experiment_dir, 'message.txt')), args.verbose)
+
     val_split = 0.2 # use 20 percent for validation
     val_split_index = int(float(len(midi_files)) * val_split)
     
@@ -159,7 +219,7 @@ def main():
     print('fitting model...')
     model.fit_generator(train_generator,
                         steps_per_epoch=10000, 
-                        epochs=10,
+                        epochs=args.num_epochs,
                         validation_data=val_generator, 
                         validation_steps=2000,
                         verbose=1, 
