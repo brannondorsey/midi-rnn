@@ -1,6 +1,7 @@
-import os
+import os, glob, random
 import pretty_midi
 import numpy as np
+from keras.models import model_from_json
 from multiprocessing import Pool as ThreadPool
 
 def log(message, verbose):
@@ -77,25 +78,27 @@ def create_experiment_dir(experiment_dir, verbose=False):
 def get_data_generator(midi_paths, 
                        window_size=20, 
                        batch_size=32,
-                       num_threads=8):
+                       num_threads=8,
+                       max_files_in_ram=170):
 
-    load_size = 170 # this refers to files
-
-     # load midi data
-    pool = ThreadPool(num_threads)
+    if num_threads > 1:
+    	# load midi data
+    	pool = ThreadPool(num_threads)
 
     load_index = 0
 
     while True:
-        
-        load_files = midi_paths[load_index:load_index + load_size]
+        load_files = midi_paths[load_index:load_index + max_files_in_ram]
         # print('length of load files: {}'.format(len(load_files)))
-        load_index = (load_index + load_size) % len(midi_paths)
+        load_index = (load_index + max_files_in_ram) % len(midi_paths)
 
-        # print('loading large batch: {}'.format(load_size))
+        # print('loading large batch: {}'.format(max_files_in_ram))
         # print('Parsing midi files...')
         # start_time = time.time()
-        parsed = pool.map(parse_midi, load_files)
+        if num_threads > 1:
+       		parsed = pool.map(parse_midi, load_files)
+       	else:
+       		parsed = map(parse_midi, load_files)
         # print('Finished in {:.2f} seconds'.format(time.time() - start_time))
         # print('parsed, now extracting data')
         data = _windows_from_monophonic_instruments(parsed, window_size)
@@ -116,6 +119,100 @@ def get_data_generator(midi_paths,
 def save_model(model, model_dir):
     with open(os.path.join(model_dir, 'model.json'), 'w') as f:
         f.write(model.to_json())
+
+def load_model_from_checkpoint(model_dir):
+
+    '''Loads the best performing model from checkpoint_dir'''
+    with open(os.path.join(model_dir, 'model.json'), 'r') as f:
+        model = model_from_json(f.read())
+
+    epoch = 0
+    newest_checkpoint = max(glob.iglob(model_dir + 
+    	                    '/checkpoints/*.hdf5'), 
+                            key=os.path.getctime)
+
+    if newest_checkpoint: 
+       epoch = int(newest_checkpoint[-22:-19])
+       model.load_weights(newest_checkpoint)
+
+    return model, epoch
+
+def generate(model, seeds, window_size, length, num_to_gen, instrument_name):
+    
+    # generate a pretty midi file from a model using a seed
+    def _gen(model, seed, window_size, length):
+        
+        generated = []
+        # ring buffer
+        buf = np.copy(seed).tolist()
+        while len(generated) < length:
+            arr = np.expand_dims(np.asarray(buf), 0)
+            pred = model.predict(arr)
+            
+            # argmax sampling (NOT RECOMMENDED), or...
+            # index = np.argmax(pred)
+            
+            # prob distrobuition sampling
+            index = np.random.choice(range(0, seed.shape[1]), p=pred[0])
+            pred = np.zeros(seed.shape[1])
+
+            pred[index] = 1
+            generated.append(pred)
+            buf.pop(0)
+            buf.append(pred)
+
+        return generated
+
+    midis = []
+    for i in range(0, num_to_gen):
+        seed = seeds[random.randint(0, len(seeds) - 1)]
+        gen = _gen(model, seed, window_size, length)
+        midis.append(_network_output_to_midi(gen, instrument_name))
+    return midis
+
+# create a pretty midi file with a single instrument using the one-hot encoding
+# output of keras model.predict.
+def _network_output_to_midi(windows, 
+                           instrument_name='Acoustic Grand Piano', 
+                           allow_represses=False):
+
+    # Create a PrettyMIDI object
+    midi = pretty_midi.PrettyMIDI()
+    # Create an Instrument instance for a cello instrument
+    instrument_program = pretty_midi.instrument_name_to_program(instrument_name)
+    instrument = pretty_midi.Instrument(program=instrument_program)
+    
+    cur_note = None # an invalid note to start with
+    cur_note_start = None
+    clock = 0
+
+    # Iterate over note names, which will be converted to note number later
+    for step in windows:
+
+        note_num = np.argmax(step) - 1
+        
+        # a note has changed
+        if allow_represses or note_num != cur_note:
+            
+            # if a note has been played before and it wasn't a rest
+            if cur_note is not None and cur_note >= 0:            
+                # add the last note, now that we have its end time
+                note = pretty_midi.Note(velocity=127, 
+                                        pitch=int(cur_note), 
+                                        start=cur_note_start, 
+                                        end=clock)
+                instrument.notes.append(note)
+
+            # update the current note
+            cur_note = note_num
+            cur_note_start = clock
+
+        # update the clock
+        clock = clock + 1.0 / 4
+
+    # Add the cello instrument to the PrettyMIDI object
+    midi.instruments.append(instrument)
+    return midi
 
 # returns X, y data windows from all monophonic instrument
 # tracks in a pretty midi file

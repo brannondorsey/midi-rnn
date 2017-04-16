@@ -1,5 +1,6 @@
 appdirs==1.4.3
 funcsigs==1.0.2
+h5py==2.7.0
 Keras==2.0.3
 mido==1.2.4
 mock==2.0.0

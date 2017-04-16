@@ -1,6 +1,5 @@
 #!/usr/bin/env python
-
-import os, time, sys, argparse
+import os, argparse
 import utils
 from keras.models import Sequential
 from keras.layers import Dense, Activation, Dropout
@@ -20,16 +19,18 @@ def parse_args():
                         default='experiments/default',
                         help='directory to store checkpointed models and tensorboard logs.' \
                              'if omitted, will create a new numbered folder in experiments/.')
-    parser.add_argument('--n_jobs', '-j', type=int, 
+    parser.add_argument('--n_jobs', '-j', type=int, default=1, 
                         help='Number of CPUs to use when loading and parsing midi files.')
+    parser.add_argument('--max_files_in_ram', '-m', default=50,
+                        help='The maximum number of midi files to load into RAM at once.'\
+                        ' A higher value trains faster but uses more RAM. A lower value '\
+                        'uses less RAM but takes significantly longer to train.')
     parser.add_argument('--rnn_size', type=int, default=64,
                         help='size of RNN hidden state')
     parser.add_argument('--num_layers', type=int, default=1,
                         help='number of layers in the RNN')
-    parser.add_argument('--window_size', type=int, default=50,
+    parser.add_argument('--window_size', type=int, default=20,
                         help='Window size for RNN input per step.')
-    # parser.add_argument('--model', type=str, default='lstm',
-    #                     help='rnn, gru, lstm')
     parser.add_argument('--batch_size', type=int, default=50,
                         help='minibatch size')
     parser.add_argument('--num_epochs', type=int, default=50,
@@ -63,23 +64,21 @@ def get_model(args, experiment_dir=None):
         model.add(Dense(OUTPUT_SIZE))
         model.add(Activation('softmax'))
     else:
-        model, epoch = model_utils.load_model_from_checkpoint(experiment_dir)
+        model, epoch = utils.load_model_from_checkpoint(experiment_dir)
 
     model.compile(loss='categorical_crossentropy', 
                   optimizer='adam',
                   metrics=['accuracy'])
     return model, epoch
 
-def get_callbacks(experiment_dir, checkpoint_monitor='val_acc', model_index=0):
+def get_callbacks(experiment_dir, checkpoint_monitor='val_acc'):
     
     callbacks = []
     
     # save model checkpoints
     filepath = os.path.join(experiment_dir, 
                             'checkpoints', 
-                            'model-' + 
-                             str(model_index) + 
-                             '_checkpoint-epoch_{epoch:03d}-val_acc_{val_acc:.3f}.hdf5')
+                            'checkpoint-epoch_{epoch:03d}-val_acc_{val_acc:.3f}.hdf5')
 
     callbacks.append(ModelCheckpoint(filepath, 
                                      monitor=checkpoint_monitor, 
@@ -101,14 +100,20 @@ def get_callbacks(experiment_dir, checkpoint_monitor='val_acc', model_index=0):
                                 write_graph=True, 
                                 write_images=False))
 
+    return callbacks
+
 def main():
 
     args = parse_args()
 
-    # get paths to midi files in --data_dir
-    midi_files = [os.path.join(args.data_dir, path) \
-                  for path in os.listdir(args.data_dir) \
-                  if '.mid' in path or '.midi' in path]
+    try:
+        # get paths to midi files in --data_dir
+        midi_files = [os.path.join(args.data_dir, path) \
+                      for path in os.listdir(args.data_dir) \
+                      if '.mid' in path or '.midi' in path]
+    except OSError as e:
+        log('Error: Invalid --data_dir, {} directory does not exist. Exiting.', args.verbose)
+        exit(1)
 
     utils.log(
         'Found {} midi files in {}'.format(len(midi_files), args.data_dir),
@@ -133,12 +138,14 @@ def main():
     train_generator = utils.get_data_generator(midi_files[0:val_split_index], 
                                                window_size=args.window_size,
                                                batch_size=args.batch_size,
-                                               num_threads=args.n_jobs)
+                                               num_threads=args.n_jobs,
+                                               max_files_in_ram=args.max_files_in_ram)
 
     val_generator = utils.get_data_generator(midi_files[val_split_index:], 
                                              window_size=args.window_size,
                                              batch_size=args.batch_size,
-                                             num_threads=args.n_jobs)
+                                             num_threads=args.n_jobs,
+                                             max_files_in_ram=args.max_files_in_ram)
 
     model, epoch = get_model(args)
     if args.verbose:
