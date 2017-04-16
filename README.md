@@ -14,16 +14,16 @@ git clone https://github.com/brannondorsey/midi-rnn.git
 pip install requirements.txt
 ``` 
 
-If you have CUDA installed and would like to train using your GPU, additionally run:
+If you have CUDA installed and would like to train using your GPU, additionally run (if you don't know what that means, no worries, you can skip this):
 ```bash
 pip install tensorflow-gpu
 ``` 
 
 ## Training a Model
 
-First create a folder of MIDI files that you would like to train your model with. I've included ~130 files from the [Lakh MIDI Dataset](http://colinraffel.com/projects/lmd/) inside `data/midi` that you can use to get started.
+First create a folder of MIDI files that you would like to train your model with. I've included ~130 files from the [Lakh MIDI Dataset](http://colinraffel.com/projects/lmd/) inside `data/midi` that you can use to get started. Note that is basic RNN learns only from the monophonic tracks in MIDI files and simply ignores tracks that are observed to include polyphony.
 
-Once you've got a collection of midi files you can train your model with `train.py`.
+Once you've got a collection of MIDI files you can train your model with `train.py`.
 
 ```bash
 python train.py --data_dir data/midi
@@ -35,18 +35,18 @@ For a list of supported command line flags, run:
 python train.py --help
 ```
 
-Or [see below](#trainpy) for a detailed description of each option. By default, model checkpoints are saved in auto-incrementing folders inside of `experiments`, however, their location can be set explicitly with the `--experiment_dir flag`.
+Or [see below](#trainpy) for a detailed description of each option. By default, model checkpoints are saved in auto-incrementing folders inside of `experiments`, however, their location can be set explicitly with the `--experiment_dir` flag.
 
 ### Monitoring Training with Tensorboard
 
-`model-rnn` logs training metrics using Tensorboard. These logs are stored in a folder called `tensorboard-logs` inside of your `--experiment_dir`.
+`model-rnn` logs training metrics using [Tensorboard](https://www.tensorflow.org/get_started/summaries_and_tensorboard). These logs are stored in a folder called `tensorboard-logs` inside of your `--experiment_dir`.
 
 ```
 # Compare the training metrics of all of your experiments at once
 tensorboard --logdir experiments/
 ```
 
-Once Tensorboard is running, navigate to `http://localhost:6006` to view the training metrics for your model in real time.
+Once Tensorboard is running, navigate your web browser to `http://localhost:6006` to view the training metrics for your model in real time.
 
 ## Generating MIDI
 
@@ -56,26 +56,26 @@ Once you've trained your model, you can generate MIDI files using `sample.py`.
 python sample.py
 ```
 
-By default, this creates 10 MIDI files using a checkpoint from the most recent folder in `experiments/` and saves the generated files to `generated/` inside of that experiment (e.g. `experiments/01/generated/`). You can specify which model you would like to use when generating using the `--experiment_dir` flag. You can also specify where you would like to save the generated files by including a value for the `--save_dir` flag. For a complete list of command line flags, see below.
+By default, this creates 10 MIDI files using a model checkpoint from the most recent folder in `experiments/` and saves the generated files to `generated/` inside of that experiment directory (e.g. `experiments/01/generated/`). You can specify which model you would like to use when generating using the `--experiment_dir` flag. You can also specify where you would like to save the generated files by including a value for the `--save_dir` flag. For a complete list of command line flags, see below.
 
 ## Command Line Arguments
 
 ### `train.py`
 
-- `--data_dir`: A folder containing `.mid` files to use for training. All files in this folder will be used for training.
+- `--data_dir`: A folder containing `.mid` (or `.midi`) files to use for training. All files in this folder will be used for training.
 - `--experiment_dir`: The name of the folder to use when saving the model checkpoints and Tensorboard logs. If omitted, a new folder will be created with an auto-incremented number inside of `experiments/`.
 - `--rnn_size` (default: 64): The number of neurons in hidden layers.
 - `--num_layers` (default: 1): The number of hidden layers.
-- `--learning_rate` (default: 0.002): The learning rate to use with the optimizer. It is recomended to adjust this value in multiples of 10.
+- `--learning_rate` (default: the recommended value for your optimizer): The learning rate to use with the optimizer. It is recomended to adjust this value in multiples of 10.
 - `--window_size` (default: 20): The number of previous notes (and rests) to use as input to the network at each step (measured in 16th notes). It is helpful to think of this as the fixed width of a piano roll rather than individual events.
-- `--batch_size` (default: 32): The number of samples to pass through the network before updating weights (backpropagating).
+- `--batch_size` (default: 32): The number of samples to pass through the network before updating weights.
 - `--num_epochs` (default: 10): The number of epochs before completing training. One epoch is equal to one full pass through all midi files in `--data_dir`. Because of the way files are lazy loaded, this number can only be an estimate.
 - `--dropout` (default: 0.2): The normalized percentage (0-1) of weights to randomly turn "off" in each layer during a training step. This is a regularization technique called which helps prevent model overfitting. Recommended values are between 0.2 and 0.5, or 20% and 50%. 
 - `--optimizer` (default: "adam"): The optimization algorithm to use when minimizing your loss function. See https://keras.io/optimizers for a list of supported optimizers and and links to their descriptions.
 - `--grad_clip` (default: 5.0): Clip backpropagated gradients to this value.
 - `--message`: An optional note that can be used to describe your experiment. This text will be saved to `message.txt` inside of `--experiment_dir`. Including a value for this flag is very helpful if you find yourself running many experiments.
 - `--n_jobs` (default 1): The number of CPU cores to use when loading and parsing MIDI files from `--data_dir`. Increasing this value can dramatically speed up training. I commonly set this value to use all cores, which for my quad-core machine is 8 (Intel CPUs often have 2 virtual cores per CPU).
-- `--max_files_in_ram` (default: 50): Files in `--data_dir` are loaded into RAM in small batches, processed, and then released to avoid having to load all training files into memory at once (which may be impossible when training on hundreds of files on a machine with limited memory). This value specifies the maximum number of MIDI files to keep in RAM at any one time. Using a larger number significantly speeds up training, however it also runs the risk of using too much RAM and causing your machine to [thrash](https://en.wikipedia.org/wiki/Thrashing_(computer_science)) or crash. You can find a nice balance by inspecting your system monitor (Activity Monitor on MacOS and Monitor on Ubuntu) while training and adjusting accourdingly.
+- `--max_files_in_ram` (default: 25): Files in `--data_dir` are loaded into RAM in small batches, processed, and then released to avoid having to load all training files into memory at once (which may be impossible when training on hundreds of files on a machine with limited memory). This value specifies the maximum number of MIDI files to keep in RAM at any one time. Using a larger number significantly speeds up training, however it also runs the risk of using too much RAM and causing your machine to start [thrashing](https://en.wikipedia.org/wiki/Thrashing_(computer_science)) or crash. You can find a nice balance by inspecting your system monitor (Activity Monitor on MacOS and Monitor on Ubuntu) while training and adjust accourdingly.
 
 ```
 usage: train.py [-h] [--data_dir DATA_DIR] [--experiment_dir EXPERIMENT_DIR]
@@ -129,7 +129,7 @@ optional arguments:
                         The maximum number of midi files to load into RAM at
                         once. A higher value trains faster but uses more RAM.
                         A lower value uses less RAM but takes significantly
-                        longer to train. (default: 50)
+                        longer to train. (default: 25)
 ```
 
 ### `sample.py`
@@ -178,3 +178,7 @@ optional arguments:
                         specified (default: data/midi)
 
 ```
+
+## How it works
+
+This is a _very_ basic LSTM Recurrent Neural Network (RNN). It uses windows of 129-class one-hot encoded (0-127 = MIDI note numbers + 1 class to represent rests) as input for each step and creates a softmax probability distrobution over these 129 classes which it samples from to predict the next note in the sequence. That note is then appended to the window (poping the first note off the list to keep a fixed size window) and that window is then used as input for the prediction in the next time step. Many methods could be used to improve its performance (like for instance, using an encoder-decoder sequence-2-sequence model), however, `midi-rnn` should serve as a nice "naive" baseline to compare other machine learning MIDI generation tasks and algorithms against. 
