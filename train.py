@@ -49,7 +49,7 @@ def parse_args():
                         'in --experiment_dir.')
     parser.add_argument('--n_jobs', '-j', type=int, default=1, 
                         help='Number of CPUs to use when loading and parsing midi files.')
-    parser.add_argument('--max_files_in_ram', default=25,
+    parser.add_argument('--max_files_in_ram', default=25, type=int,
                         help='The maximum number of midi files to load into RAM at once.'\
                         ' A higher value trains faster but uses more RAM. A lower value '\
                         'uses less RAM but takes significantly longer to train.')
@@ -188,7 +188,7 @@ def main():
 
     val_split = 0.2 # use 20 percent for validation
     val_split_index = int(float(len(midi_files)) * val_split)
-    
+
     # use generators to lazy load train/validation data, ensuring that the
     # user doesn't have to load all midi files into RAM at once
     train_generator = utils.get_data_generator(midi_files[0:val_split_index], 
