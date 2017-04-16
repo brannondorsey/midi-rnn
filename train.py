@@ -31,9 +31,9 @@ def parse_args():
                         help='number of layers in the RNN')
     parser.add_argument('--window_size', type=int, default=20,
                         help='Window size for RNN input per step.')
-    parser.add_argument('--batch_size', type=int, default=50,
+    parser.add_argument('--batch_size', type=int, default=32,
                         help='minibatch size')
-    parser.add_argument('--num_epochs', type=int, default=50,
+    parser.add_argument('--num_epochs', type=int, default=10,
                         help='number of epochs')
     parser.add_argument('--save_every', type=int, default=1000,
                         help='save frequency')
@@ -43,8 +43,6 @@ def parse_args():
                         help='probability of keeping weights in the hidden layer (1.0 - this value = Dropout)')
     parser.add_argument('--input_keep_prob', type=float, default=1.0,
                         help='probability of keeping weights in the input layer (1.0 - this value = Dropout)')
-    parser.add_argument('--verbose', '-v', type=bool, default=1,
-                        help='log verbose.')
     return parser.parse_args()
 
 # create or load a saved model
@@ -105,6 +103,7 @@ def get_callbacks(experiment_dir, checkpoint_monitor='val_acc'):
 def main():
 
     args = parse_args()
+    args.verbose = True
 
     try:
         # get paths to midi files in --data_dir
