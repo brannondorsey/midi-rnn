@@ -7,7 +7,6 @@ mock==2.0.0
 numpy==1.12.1
 packaging==16.8
 pbr==2.1.0
-pkg-resources==0.0.0
 pretty-midi==0.2.7
 protobuf==3.2.0
 pyparsing==2.2.0
