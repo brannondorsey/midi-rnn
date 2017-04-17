@@ -11,7 +11,7 @@ git clone https://github.com/brannondorsey/midi-rnn.git
 
 # Install the dependencies. You may need to prepend sudo to 
 # this command if you get an error
-pip install requirements.txt
+pip install -r requirements.txt
 ``` 
 
 If you have CUDA installed and would like to train using your GPU, additionally run (if you don't know what that means, no worries, you can skip this):
