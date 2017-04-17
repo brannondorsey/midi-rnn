@@ -88,31 +88,36 @@ def get_model(args, experiment_dir=None):
     else:
         model, epoch = utils.load_model_from_checkpoint(experiment_dir)
 
-    kwargs = { 'clipvalue': args.grad_clip }
+    # these cli args aren't specified if get_model() is being
+    # being called from sample.py
+    if 'grad_clip' in args and 'optimizer' in args:
+        kwargs = { 'clipvalue': args.grad_clip }
 
-    if args.learning_rate:
-        kwargs['lr'] = args.learning_rate
+        if args.learning_rate:
+            kwargs['lr'] = args.learning_rate
 
-    # select the optimizers
-    if args.optimizer == 'sgd':
-        optimizer = SGD(**kwargs)
-    elif args.optimizer == 'rmsprop':
-        optimizer = RMSprop(**kwargs)
-    elif args.optimizer == 'adagrad':
-        optimizer = Adagrad(**kwargs)
-    elif args.optimizer == 'adadelta':
-        optimizer = Adadelta(**kwargs)
-    elif args.optimizer == 'adam':
-        optimizer = Adam(**kwargs)
-    elif args.optimizer == 'adamax':
-        optimizer = Adamax(**kwargs)
-    elif args.optimizer == 'nadam':
-        optimizer = Nadam(**kwargs)
-    else:
-        utils.log(
-            'Error: {} is not a supported optimizer. Exiting.'.format(args.optimizer),
-            True)
-        exit(1)
+        # select the optimizers
+        if args.optimizer == 'sgd':
+            optimizer = SGD(**kwargs)
+        elif args.optimizer == 'rmsprop':
+            optimizer = RMSprop(**kwargs)
+        elif args.optimizer == 'adagrad':
+            optimizer = Adagrad(**kwargs)
+        elif args.optimizer == 'adadelta':
+            optimizer = Adadelta(**kwargs)
+        elif args.optimizer == 'adam':
+            optimizer = Adam(**kwargs)
+        elif args.optimizer == 'adamax':
+            optimizer = Adamax(**kwargs)
+        elif args.optimizer == 'nadam':
+            optimizer = Nadam(**kwargs)
+        else:
+            utils.log(
+                'Error: {} is not a supported optimizer. Exiting.'.format(args.optimizer),
+                True)
+            exit(1)
+    else: # so instead lets use a default (no training occurs anyway)
+        optimizer = Adam()
 
     model.compile(loss='categorical_crossentropy', 
                   optimizer=optimizer,
