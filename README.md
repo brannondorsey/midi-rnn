@@ -1,6 +1,6 @@
 # MIDI RNN
 
-Generate monophonic melodies using a basic LSTM RNN. Great for Machine Learning MIDI generation baselines. Made using Keras.
+Generate monophonic melodies using a basic LSTM RNN. Great for Machine Learning MIDI melody generation baselines. For more info, check out our [blog post](https://brangerbriz.com/blog/using-machine-learning-to-create-new-melodies) about the project about the project. Made using Keras.
 
 ## Getting Started
 
