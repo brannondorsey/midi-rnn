@@ -10,12 +10,11 @@ def log(message, verbose):
 
 def parse_midi(path):
     midi = None
-    with open(path, 'r') as f:
-        try:
-            midi = pretty_midi.PrettyMIDI(f)
-            midi.remove_invalid_notes()
-        except:
-            pass
+    try:
+        midi = pretty_midi.PrettyMIDI(path)
+        midi.remove_invalid_notes()
+    except Exception as e:
+        raise Exception(("%s\nerror readying midi file %s" % (e, path)))
     return midi
 
 def get_percent_monophonic(pm_instrument_roll):
