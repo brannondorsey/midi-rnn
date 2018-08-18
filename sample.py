@@ -110,7 +110,7 @@ def main():
 
     # generate 10 tracks using random seeds
     utils.log('Loading seed files...', args.verbose)
-    X, y = seed_generator.next()
+    X, y = next(seed_generator)
     generated = utils.generate(model, X, window_size, 
     	                       args.file_length, args.num_files, args.midi_instrument)
     for i, midi in enumerate(generated):
